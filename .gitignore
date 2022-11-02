@@ -1,0 +1,6 @@
+data/*
+ASR_model/GRID/data/*.ckpt
+runs/
+output/
+*__pycache__/
+exp/

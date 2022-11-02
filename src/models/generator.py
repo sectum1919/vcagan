@@ -5,9 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from src.models.resnet import BasicBlock
 
+
 class ResBlk1D(nn.Module):
-    def __init__(self, dim_in, dim_out, actv=nn.LeakyReLU(0.2),
-                 normalize=False, downsample=False):
+
+    def __init__(self, dim_in, dim_out, actv=nn.LeakyReLU(0.2), normalize=False, downsample=False):
         super().__init__()
         self.actv = actv
         self.normalize = normalize
@@ -48,9 +49,10 @@ class ResBlk1D(nn.Module):
         x = self._shortcut(x) + self._residual(x)
         return x / math.sqrt(2)  # unit variance
 
+
 class ResBlk(nn.Module):
-    def __init__(self, dim_in, dim_out, actv=nn.LeakyReLU(0.2),
-                 normalize=False, downsample=False):
+
+    def __init__(self, dim_in, dim_out, actv=nn.LeakyReLU(0.2), normalize=False, downsample=False):
         super().__init__()
         self.actv = actv
         self.normalize = normalize
@@ -91,7 +93,9 @@ class ResBlk(nn.Module):
         x = self._shortcut(x) + self._residual(x)
         return x / math.sqrt(2)  # unit variance
 
+
 class GenResBlk(nn.Module):
+
     def __init__(self, dim_in, dim_out, actv=nn.LeakyReLU(0.2), upsample=False):
         super().__init__()
         self.actv = actv
@@ -130,16 +134,22 @@ class GenResBlk(nn.Module):
         out = (out + self._shortcut(x)) / math.sqrt(2)
         return out
 
+
 class Flatten(nn.Module):
+
     def forward(self, input):
         return input.view(input.size(0), -1)
 
+
 class Avgpool(nn.Module):
+
     def forward(self, input):
         #input:B,C,H,W
         return input.mean([2, 3])
 
+
 class AVAttention(nn.Module):
+
     def __init__(self, out_dim):
         super().__init__()
 
@@ -155,10 +165,10 @@ class AVAttention(nn.Module):
         #ph: B,S,512
         #g: B,C,F,T
         B, C, F, T = g.size()
-        k = self.k(ph).transpose(1, 2).contiguous()   # B,256,S
+        k = self.k(ph).transpose(1, 2).contiguous()  # B,256,S
         q = self.q(g.view(B, C * F, T).transpose(1, 2).contiguous())  # B,T,256
 
-        att = torch.bmm(q, k) / math.sqrt(self.out_dim)    # B,T,S
+        att = torch.bmm(q, k) / math.sqrt(self.out_dim)  # B,T,S
         for i in range(att.size(0)):
             att[i, :, len[i]:] = float('-inf')
         att = self.softmax(att)  # B,T,S
@@ -170,10 +180,11 @@ class AVAttention(nn.Module):
 
         return out  #B,C,F,T
 
-class Postnet(nn.Module):
-    def __init__(self):
-        super().__init__()
 
+class Postnet(nn.Module):
+
+    def __init__(self, win_len=1024):
+        super().__init__()
         self.postnet = nn.Sequential(
             nn.Conv1d(80, 128, 7, 1, 3),
             nn.BatchNorm1d(128),
@@ -181,17 +192,19 @@ class Postnet(nn.Module):
             ResBlk1D(128, 256),
             ResBlk1D(256, 256),
             ResBlk1D(256, 256),
-            nn.Conv1d(256, 321, 1, 1, 0, bias=False)
+            nn.Conv1d(256, int(win_len / 2 + 1), 1, 1, 0, bias=False),
         )
 
     def forward(self, x):
         # x: B,1,80,T
-        x = x.squeeze(1)    # B, 80, t
-        x = self.postnet(x)     # B, 321, T
-        x = x.unsqueeze(1)  # B, 1, 321, T
+        x = x.squeeze(1)  # B, 80, t
+        x = self.postnet(x)  # B, win_len/2+1, T
+        x = x.unsqueeze(1)  # B, 1, win_len/2+1, T
         return x
 
+
 class Decoder(nn.Module):
+
     def __init__(self):
         super().__init__()
 
@@ -205,32 +218,17 @@ class Decoder(nn.Module):
         self.att2 = AVAttention(256)
         self.attconv2 = nn.Conv2d(64 + 32, 64, 5, 1, 2)
 
-        self.to_mel1 = nn.Sequential(
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(128, 1, 1, 1, 0),
-            nn.Tanh()
-        )
-        self.to_mel2 = nn.Sequential(
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 1, 1, 1, 0),
-            nn.Tanh()
-        )
-        self.to_mel3 = nn.Sequential(
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(32, 1, 1, 1, 0),
-            nn.Tanh()
-        )
+        self.to_mel1 = nn.Sequential(nn.BatchNorm2d(128), nn.LeakyReLU(0.2), nn.Conv2d(128, 1, 1, 1, 0), nn.Tanh())
+        self.to_mel2 = nn.Sequential(nn.BatchNorm2d(64), nn.LeakyReLU(0.2), nn.Conv2d(64, 1, 1, 1, 0), nn.Tanh())
+        self.to_mel3 = nn.Sequential(nn.BatchNorm2d(32), nn.LeakyReLU(0.2), nn.Conv2d(32, 1, 1, 1, 0), nn.Tanh())
 
         # bottleneck blocks
-        self.decode.append(GenResBlk(512 + 128, 512))    # 20,T
+        self.decode.append(GenResBlk(512 + 128, 512))  # 20,T
         self.decode.append(GenResBlk(512, 256))
         self.decode.append(GenResBlk(256, 256))
 
         # up-sampling blocks
-        self.g1.append(GenResBlk(256, 128))     # 20,T
+        self.g1.append(GenResBlk(256, 128))  # 20,T
         self.g1.append(GenResBlk(128, 128))
         self.g1.append(GenResBlk(128, 128))
 
@@ -264,7 +262,9 @@ class Decoder(nn.Module):
             x = block(x)
         return self.to_mel1(g1), self.to_mel2(g2), self.to_mel3(x)
 
+
 class Discriminator(nn.Module):
+
     def __init__(self, num_class=1, max_conv_dim=512, phase='1'):
         super().__init__()
         dim_in = 32
@@ -278,8 +278,8 @@ class Discriminator(nn.Module):
         else:
             repeat_num = 4
 
-        for _ in range(repeat_num): # 80,4T --> 40,2T --> 20,T --> 10,T/2 --> 5,T/4
-            dim_out = min(dim_in*2, max_conv_dim)
+        for _ in range(repeat_num):  # 80,4T --> 40,2T --> 20,T --> 10,T/2 --> 5,T/4
+            dim_out = min(dim_in * 2, max_conv_dim)
             blocks += [ResBlk(dim_in, dim_out, downsample=True)]
             dim_in = dim_out
 
@@ -306,7 +306,7 @@ class Discriminator(nn.Module):
     def forward(self, x, c, vid_max_length):
         # c: B,C,T
         f_len = final_length(vid_max_length)
-        c = c.mean(2) #B,C
+        c = c.mean(2)  #B,C
         c = c.unsqueeze(2).unsqueeze(2).repeat(1, 1, 5, f_len)
         out = self.main(x).clone()
         uout = self.uncond(out)
@@ -316,22 +316,18 @@ class Discriminator(nn.Module):
         cout = cout.view(cout.size(0), -1)  # (batch, num_domains)
         return uout, cout
 
+
 class sync_Discriminator(nn.Module):
+
     def __init__(self, temp=1.0):
         super().__init__()
 
-        self.frontend = nn.Sequential(
-            nn.Conv2d(1, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
-            nn.BatchNorm2d(128),
-            nn.PReLU(128),
-            nn.Conv2d(128, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
-            nn.BatchNorm2d(256),
-            nn.PReLU(256)
-        )
+        self.frontend = nn.Sequential(nn.Conv2d(1, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
+                                      nn.BatchNorm2d(128), nn.PReLU(128),
+                                      nn.Conv2d(128, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
+                                      nn.BatchNorm2d(256), nn.PReLU(256))
 
-        self.Res_block = nn.Sequential(
-            BasicBlock(256, 256)
-        )
+        self.Res_block = nn.Sequential(BasicBlock(256, 256))
 
         self.Linear = nn.Linear(256 * 20, 512)
         self.temp = temp
@@ -342,28 +338,30 @@ class sync_Discriminator(nn.Module):
         a_feat = self.Res_block(a_feat)
         b, c, f, t = a_feat.size()
         a_feat = a_feat.view(b, c * f, t).transpose(1, 2).contiguous()  # B, T/4, 256 * F/4
-        a_feat = self.Linear(a_feat)    # B, S, 512
+        a_feat = self.Linear(a_feat)  # B, S, 512
 
         if gen:
-            sim = torch.abs(F.cosine_similarity(v_feat, a_feat, 2)).mean(1)    #B, S
+            sim = torch.abs(F.cosine_similarity(v_feat, a_feat, 2)).mean(1)  #B, S
             loss = 5 * torch.ones_like(sim) - sim
         else:
-            v_feat_norm = F.normalize(v_feat, dim=2)    #B,S,512
-            a_feat_norm = F.normalize(a_feat, dim=2)    #B,S,512
+            v_feat_norm = F.normalize(v_feat, dim=2)  #B,S,512
+            a_feat_norm = F.normalize(a_feat, dim=2)  #B,S,512
 
-            sim = torch.bmm(v_feat_norm, a_feat_norm.transpose(1, 2)) / self.temp #B,v_S,a_S
+            sim = torch.bmm(v_feat_norm, a_feat_norm.transpose(1, 2)) / self.temp  #B,v_S,a_S
 
             nce_va = torch.mean(torch.diagonal(F.log_softmax(sim, dim=2), dim1=-2, dim2=-1), dim=1)
             nce_av = torch.mean(torch.diagonal(F.log_softmax(sim, dim=1), dim1=-2, dim2=-1), dim=1)
 
-            loss = -1/2 * (nce_va + nce_av)
+            loss = -1 / 2 * (nce_va + nce_av)
 
         return loss
+
 
 def gan_loss(inputs, label=None):
     # non-saturating loss with R1 regularization
     l = -1 if label else 1
-    return F.softplus(l*inputs).mean()
+    return F.softplus(l * inputs).mean()
+
 
 def final_length(vid_length):
     half = (vid_length // 2)

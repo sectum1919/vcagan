@@ -13,6 +13,9 @@ from torchvision import transforms
 import librosa
 import soundfile as sf
 import argparse
+from tqdm import tqdm
+import multiprocessing
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -24,15 +27,19 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+
 args = parse_args()
 eps = 1e-8
 
+
 class Crop(object):
+
     def __init__(self, crop):
         self.crop = crop
 
     def __call__(self, img):
         return img.crop(self.crop)
+
 
 ######################################################
 f = open(args.reference, 'r')
@@ -51,7 +58,8 @@ refer_lm = temp_lm
 
 
 class Preprocessing(Dataset):
-    def __init__(self,):
+
+    def __init__(self, ):
         self.file_paths = self.build_file_list()
 
     def build_file_list(self):
@@ -106,7 +114,9 @@ class Preprocessing(Dataset):
         aligned_video = np.array(aligned_video)
 
         #### audio preprocessing ####
-        aud, _ = librosa.load(os.path.join(file_path.replace(args.Landmark, args.Data_dir).replace('video', 'audio')[:-4] + '.wav'), 16000)
+        aud, _ = librosa.load(
+            os.path.join(file_path.replace(args.Landmark, args.Data_dir).replace('video', 'audio')[:-4] + '.wav'),
+            16000)
         fc = 55.  # Cut-off frequency of the filter
         w = fc / (16000 / 2)  # Normalize the frequency
         b, a = signal.butter(7, w, 'high')
@@ -114,12 +124,15 @@ class Preprocessing(Dataset):
 
         return torch.tensor(aligned_video), save_path, f_name, torch.tensor(aud.copy())
 
+
 Data = Preprocessing()
-Data_loader = DataLoader(Data, shuffle=False, batch_size=1, num_workers=3)
+Data_loader = DataLoader(Data, shuffle=False, batch_size=1, num_workers=16)
 tform = transform.SimilarityTransform()
 
-for kk, data in enumerate(Data_loader):
-    cropped_video, save_path, f_name, aud = data
+pbar = tqdm(total=len(Data_loader), desc='Preprocess')
+
+
+def process_worker(cropped_video, save_path, f_name, aud):
     aud = aud[0]
     cropped_video = cropped_video[0]
     save_path = save_path[0]
@@ -130,4 +143,11 @@ for kk, data in enumerate(Data_loader):
         os.makedirs(save_path.replace('video', 'audio'))
     torchvision.io.write_video(os.path.join(save_path, f_name[:-4] + '.mp4'), video_array=cropped_video, fps=args.FPS)
     sf.write(os.path.join(save_path.replace('video', 'audio'), f_name[:-4] + ".flac"), aud.numpy(), samplerate=16000)
-    print('##########', kk + 1, ' / ', len(Data_loader), '##########')
+
+
+for kk, data in enumerate(Data_loader):
+    cropped_video, save_path, f_name, aud = data
+    print(data)
+    process_worker(cropped_video, save_path, f_name, aud)
+    # print('##########', kk + 1, ' / ', len(Data_loader), '##########')
+    pbar.update()
