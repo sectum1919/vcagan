@@ -1,6 +1,11 @@
-data/*
+*.wav
+*.mp4
 ASR_model/GRID/data/*.ckpt
 runs/
-output/
+output/checkpoint/
+output/predictions/
 *__pycache__/
 exp/
+data/cmlr/ori_data/rois
+data/cmlr/processed/rois
+data/cmlr/processed/face
