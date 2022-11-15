@@ -76,11 +76,11 @@ class MultiDataset(Dataset):
 
     def build_file_list(self, grid, mode, subject):
         file_list = []
-        with open(f'/work104/cchen/data/audio-visual/vcagan_GRID/filelist/{subject}-{mode}.txt') as fp:
+        with open(f'{grid}/filelists/{subject}-{mode}.txt') as fp:
             for line in fp.readlines():
                 fn, spk = line.strip().split(' ')
-                vfn = os.path.join(grid, f'{spk}/video/{fn}.mp4')
-                afn = os.path.join(grid, f'{spk}/audio/{fn}.flac')
+                vfn = os.path.join(grid, 'data', f'{spk}/video/{fn}.mp4')
+                afn = os.path.join(grid, 'data', f'{spk}/audio/{fn}.flac')
                 if os.path.exists(vfn) and os.path.exists(afn):
                     file_list.append(vfn)
         return file_list
@@ -168,8 +168,7 @@ class MultiDataset(Dataset):
             ], 1)
 
         if self.mode == 'test':
-            return melspec, spec, vid, num_v_frames, audio.squeeze(0), num_a_frames, file_path.replace(self.grid,
-                                                                                                       '')[1:-4]
+            return melspec, spec, vid, num_v_frames, audio.squeeze(0), num_a_frames, file_path.replace(self.grid, '')[:-4].strip('/')
         else:
             return melspec, spec, vid, num_v_frames, audio.squeeze(0), num_a_frames
 

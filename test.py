@@ -213,8 +213,7 @@ def test(v_front, gen, post, val_data, fast_validate=False):
                     pesq_spec_list.append(pesq_v)
                 except Exception as e:
                     print(e)
-
-                sub_name, _, file_name = f_name[b].split('/')
+                _, sub_name, _, file_name = f_name[b].split('/')
                 if not os.path.exists(f'{args.output_dir}/spec_mel/{sub_name}'):
                     os.makedirs(f'{args.output_dir}/spec_mel/{sub_name}')
                 np.savez(f'{args.output_dir}/spec_mel/{sub_name}/{file_name}.npz',

@@ -66,8 +66,9 @@ class Preprocessing(Dataset):
         file_list = []
         landmarks = sorted(glob.glob(os.path.join(args.Landmark, '*', '*', '*.txt')))
         for lm in landmarks:
-            if not os.path.exists(lm.replace(args.Landmark, args.Output_dir)[:-4] + '.mp4'):
-                file_list.append(lm)
+            if os.path.exists(lm.replace(args.Landmark, args.Data_dir)[:-4]):
+                if not os.path.exists(lm.replace(args.Landmark, args.Output_dir)[:-4] + '.mp4'):
+                    file_list.append(lm)
         return file_list
 
     def __len__(self):
@@ -80,6 +81,10 @@ class Preprocessing(Dataset):
 
         for im in ims:
             frames += [cv2.cvtColor(cv2.imread(im), cv2.COLOR_BGR2RGB)]
+        
+        if len(frames) == 0:
+            print(file_path)
+        
         v = np.stack(frames, 0)
 
         t, f_name = os.path.split(file_path)
@@ -125,11 +130,6 @@ class Preprocessing(Dataset):
         return torch.tensor(aligned_video), save_path, f_name, torch.tensor(aud.copy())
 
 
-Data = Preprocessing()
-Data_loader = DataLoader(Data, shuffle=False, batch_size=1, num_workers=16)
-tform = transform.SimilarityTransform()
-
-pbar = tqdm(total=len(Data_loader), desc='Preprocess')
 
 
 def process_worker(cropped_video, save_path, f_name, aud):
@@ -144,10 +144,21 @@ def process_worker(cropped_video, save_path, f_name, aud):
     torchvision.io.write_video(os.path.join(save_path, f_name[:-4] + '.mp4'), video_array=cropped_video, fps=args.FPS)
     sf.write(os.path.join(save_path.replace('video', 'audio'), f_name[:-4] + ".flac"), aud.numpy(), samplerate=16000)
 
+if __name__ == "__main__":
 
-for kk, data in enumerate(Data_loader):
-    cropped_video, save_path, f_name, aud = data
-    print(data)
-    process_worker(cropped_video, save_path, f_name, aud)
-    # print('##########', kk + 1, ' / ', len(Data_loader), '##########')
-    pbar.update()
+    Data = Preprocessing()
+    Data_loader = DataLoader(Data, shuffle=False, batch_size=1, num_workers=16)
+    tform = transform.SimilarityTransform()
+
+    pbar = tqdm(total=len(Data_loader), desc='Preprocess')
+    update = lambda *args: pbar.update()
+    p = multiprocessing.Pool(processes=2)
+
+    for kk, data in enumerate(Data_loader):
+        cropped_video, save_path, f_name, aud = data
+        # print(data)
+        p.apply_async(process_worker, (cropped_video, save_path, f_name, aud), callback=update)
+        # process_worker(cropped_video, save_path, f_name, aud)
+        # pbar.update()
+    p.close()
+    p.join()

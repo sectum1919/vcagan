@@ -1,5 +1,6 @@
 *.wav
 *.mp4
+*.mpg
 ASR_model/GRID/data/*.ckpt
 runs/
 output/checkpoint/
@@ -9,3 +10,9 @@ exp/
 data/cmlr/ori_data/rois
 data/cmlr/processed/rois
 data/cmlr/processed/face
+data/grid/extracted/data
+data/grid/grid_lm/s*
+data/grid/grid_lm/*.zip
+data/grid/ori_data/audio/s*
+data/grid/ori_data/video/s*
+data/grid/processed/data/s*
